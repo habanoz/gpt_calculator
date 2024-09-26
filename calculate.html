@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPT Parameter Calculator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md w-96">
+        <h1 class="text-2xl font-bold mb-4">GPT Parameter Calculator</h1>
+        <div class="mb-4">
+            <label for="hidden-dim" class="block text-sm font-medium text-gray-700">Hidden Dimension:</label>
+            <input type="number" value="768" id="hidden-dim" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+        </div>
+        <div class="mb-4">
+            <label for="num-layers" class="block text-sm font-medium text-gray-700">Number of Layers:</label>
+            <input type="number" value="12" id="num-layers" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+        </div>
+        <div class="mb-4">
+            <label for="vocab-size" class="block text-sm font-medium text-gray-700">Vocabulary Size:</label>
+            <input type="number" value="50257" id="vocab-size" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+        </div>
+        <div class="mb-4">
+            <label for="bias" class="block text-sm font-medium text-gray-700">Include bias:</label>
+            <input type="checkbox" id="bias" class="mt-1 block">
+        </div> 
+        <div class="mb-4">
+            <label for="weightTying" class="block text-sm font-medium text-gray-700">Weight tying:</label>
+            <input type="checkbox" id="weightTying" class="mt-1 block" checked>
+        </div>
+        <button onclick="calculateParameters()" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Calculate
+        </button>
+        <div id="result" class="mt-4 text-lg font-semibold"></div>
+    </div>
+
+    <script>
+        function calculateParameters() {
+            const hiddenDim = parseInt(document.getElementById('hidden-dim').value);
+            const numLayers = parseInt(document.getElementById('num-layers').value);
+            const vocabSize = parseInt(document.getElementById('vocab-size').value);
+            const includeBias = document.getElementById('bias').checked; 
+            const weightTying = document.getElementById('weightTying').checked; 
+
+            if (isNaN(hiddenDim) || isNaN(numLayers) || isNaN(vocabSize)) {
+                document.getElementById('result').textContent = 'Please enter valid numbers.';
+                return;
+            }
+
+            // Calculate parameters
+            const wte = vocabSize * hiddenDim; // Token embedding
+            const wpe = hiddenDim * 1024; // Positional embedding (max 1024 positions)
+            
+            // Per layer
+            const ln_1 = hiddenDim; // layer norm 1
+            const attn_c_attn = 3 * hiddenDim * hiddenDim; // Query, Key, Value projections
+            const attn_c_proj = hiddenDim * hiddenDim; // Output projection
+            const ln_2 = hiddenDim; // layer norm 2
+            const mlp_c_fc = 4 * hiddenDim * hiddenDim; // First MLP layer
+            const mlp_c_proj = 4 * hiddenDim * hiddenDim; // Second MLP layer
+
+            const paramsPerLayer = ln_1 + attn_c_attn + attn_c_proj + ln_1 + mlp_c_fc + mlp_c_proj;
+            const final_ln = hiddenDim
+
+            let totalParams = wte + wpe + (paramsPerLayer * numLayers) + final_ln; 
+
+            if(includeBias){
+                // each layer has 6 biases
+                // - ln_1.bias
+                // - c_attn.bias (3 * hidden dimension)
+                // - c_proj.bias
+                // - ln_2.bias
+                // - c_fc.bias (4 * hidden dimension)
+                // - c_proj.bias
+                totalParams += 11 * numLayers * hiddenDim
+                
+                // final ln has a bias
+                totalParams += hiddenDim
+            }
+
+            if (!weightTying){
+                totalParams += vocabSize * hiddenDim; // final output token embeddings
+            }
+
+            document.getElementById('result').textContent = `Total parameters: ${totalParams.toLocaleString()}`;
+        }
+    </script>
+</body>
+</html>
