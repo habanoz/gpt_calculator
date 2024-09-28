@@ -72,11 +72,16 @@
 
             const paramsPerLayer = ln_1 + attn_c_attn + attn_c_proj + ln_1 + mlp_c_fc + mlp_c_proj;
             const final_ln = hiddenDim
+            const final_dense = vocabSize * hiddenDim
 
-            let totalParams = (paramsPerLayer * numLayers) + final_ln; 
+            let totalParams = (paramsPerLayer * numLayers) + final_ln + final_dense; 
             
             if (includeEmbeddings){
-                totalParams += wte + wpe
+                totalParams += wpe
+                if (!weightTying){
+                    // if weight tying, wte and final_dense is shared. Only count wte when weight tying is off
+                    totalParams += wte; 
+                }
             }
 
             if(includeBias){
@@ -93,9 +98,7 @@
                 totalParams += hiddenDim
             }
 
-            if (!weightTying){
-                totalParams += vocabSize * hiddenDim; // final output token embeddings
-            }
+            
 
             document.getElementById('result').textContent = `Total parameters: ${totalParams.toLocaleString()}`;
         }
