@@ -33,6 +33,10 @@
             <label for="weightTying" class="block text-sm font-medium text-gray-700">Weight tying:</label>
             <input type="checkbox" id="weightTying" class="mt-1 block" checked>
         </div>
+        <div class="mb-4">
+            <label for="includeEmbeddings" class="block text-sm font-medium text-gray-700">Include Embeddings:</label>
+            <input type="checkbox" id="includeEmbeddings" class="mt-1 block" checked>
+        </div>
         <button onclick="calculateParameters()" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             Calculate
         </button>
@@ -47,6 +51,7 @@
             const vocabSize = parseInt(document.getElementById('vocab-size').value);
             const includeBias = document.getElementById('bias').checked; 
             const weightTying = document.getElementById('weightTying').checked; 
+            const includeEmbeddings = document.getElementById('includeEmbeddings').checked; 
 
             if (isNaN(sequenceLength) || isNaN(hiddenDim) || isNaN(numLayers) || isNaN(vocabSize)) {
                 document.getElementById('result').textContent = 'Please enter valid numbers.';
@@ -68,7 +73,11 @@
             const paramsPerLayer = ln_1 + attn_c_attn + attn_c_proj + ln_1 + mlp_c_fc + mlp_c_proj;
             const final_ln = hiddenDim
 
-            let totalParams = wte + wpe + (paramsPerLayer * numLayers) + final_ln; 
+            let totalParams = (paramsPerLayer * numLayers) + final_ln; 
+            
+            if (includeEmbeddings){
+                totalParams += wte + wpe
+            }
 
             if(includeBias){
                 // each layer has 6 biases
