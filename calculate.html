@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPT Parameter Calculator</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center">
     <div class="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 class="text-2xl font-bold mb-4">GPT Parameter Calculator</h1>
+        <h1 class="text-2xl font-bold mb-4">GPT Calculator</h1>
         <div class="mb-4">
             <label for="seq-length" class="block text-sm font-medium text-gray-700">Sequence Length:</label>
             <input type="number" value="1024" id="seq-length" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
@@ -37,13 +37,46 @@
             <label for="includeEmbeddings" class="block text-sm font-medium text-gray-700">Include Embeddings:</label>
             <input type="checkbox" id="includeEmbeddings" class="mt-1 block" checked>
         </div>
+        
+        <h2 class="text-2xl font-semibold mb-4">Training Estimations</h1>
+        
+        <div class="mb-4">
+            <label for="tflops" class="block text-sm font-medium text-gray-700">GPU Teraflop per second(TFLOPS):</label>
+            <input type="number" value="65" id="tflops" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+        </div>
+        <div class="mb-4">
+            <label for="mfu" class="block text-sm font-medium text-gray-700">Model FLOP Utilization (MFU):</label>
+            <input type="number" value="0.22" id="mfu" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+        </div>
+
         <button onclick="calculateParameters()" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             Calculate
         </button>
-        <div id="result" class="mt-4 text-lg font-semibold"></div>
+        
+        <div id="params" class="mt-4 text-lg"></div>
+        <div id="estimations" class="mt-4 text-lg font-semibold" style="display: none;">Chinchilla (Approach 2) Estimations</div>
+        <div id="tokens" class="mt-4 text-lg"></div>
+        <div id="total_flops" class="mt-4 text-lg"></div>
+        <div id="hours" class="mt-4 text-lg"></div>
+        <div id="llama_estimations" class="mt-4 text-lg font-semibold" style="display: none;">Llama3 Estimations for the same FLOPs</div>
+        <div id="llama_estimation_token" class="mt-4 text-lg"></div>
+        <div id="llama_estimation_param" class="mt-4 text-lg"></div>
     </div>
 
     <script>
+        function projectTokens(n_params){
+            const m = 1.041;
+            const c = 0.9354;
+            return Math.pow(10, (m * Math.log10(n_params)) + c);
+        }
+
+        function llamaLaws(c){
+            const a = 0.5372651710628614;
+            const tokens = 0.299*(c**a);
+            const params = c / (5.711*tokens);
+            return [tokens, params];
+        }
+
         function calculateParameters() {
             const sequenceLength = parseInt(document.getElementById('seq-length').value);
             const hiddenDim = parseInt(document.getElementById('hidden-dim').value);
@@ -52,9 +85,16 @@
             const includeBias = document.getElementById('bias').checked; 
             const weightTying = document.getElementById('weightTying').checked; 
             const includeEmbeddings = document.getElementById('includeEmbeddings').checked; 
+            const mfu = parseFloat(document.getElementById('mfu').value);
+            const tflops = parseFloat(document.getElementById('tflops').value);
 
             if (isNaN(sequenceLength) || isNaN(hiddenDim) || isNaN(numLayers) || isNaN(vocabSize)) {
                 document.getElementById('result').textContent = 'Please enter valid numbers.';
+                return;
+            }
+
+            if (!isNaN(mfu) && (mfu <0 || mfu > 1)){
+                document.getElementById('result').textContent = 'MFU should be in range [0,1].';
                 return;
             }
 
@@ -74,8 +114,9 @@
             const final_ln = hiddenDim
             const final_dense = vocabSize * hiddenDim
 
-            let totalParams = (paramsPerLayer * numLayers) + final_ln + final_dense; 
-            
+            const totalParamsWOEmbedding = (paramsPerLayer * numLayers) + final_ln + final_dense; 
+            let totalParams = totalParamsWOEmbedding;
+
             if (includeEmbeddings){
                 totalParams += wpe
                 if (!weightTying){
@@ -98,9 +139,29 @@
                 totalParams += hiddenDim
             }
 
+            document.getElementById('params').textContent = `#parameters: ${totalParams.toLocaleString()}`;
             
+            if (!isNaN(tflops) && !isNaN(mfu)){
+                tokens = projectTokens(totalParamsWOEmbedding);
+                total_compute = 6 * totalParamsWOEmbedding * tokens; // 6ND
+                effective_flops = tflops * 1e12 * mfu;
 
-            document.getElementById('result').textContent = `Total parameters: ${totalParams.toLocaleString()}`;
+                total_seconds = (total_compute / effective_flops);
+                total_hours = total_seconds / 3600;
+
+                const [ll_tokens, ll_params] = llamaLaws(total_compute);
+                
+                document.getElementById('estimations').style.display = `block`;
+                document.getElementById('tokens').textContent = `Optimal Tokens: ${tokens.toExponential(3)}`;
+                document.getElementById('total_flops').textContent = `Cost (FLOP): ${total_compute.toExponential(3)}`;
+                document.getElementById('hours').textContent = `Duration (Hour): ${Math.round(total_hours)}`;
+                document.getElementById('llama_estimations').style.display = `block`;
+                document.getElementById('llama_estimation_token').textContent = `Optimal Tokens: ${ll_tokens.toExponential(3)}`;
+                document.getElementById('llama_estimation_param').textContent = `Optimal Params: ${ll_params.toExponential(3)}`;
+            }else{
+                document.getElementById('tokens').textContent = ``;
+                document.getElementById('estimations').textContent = ``;
+            }
         }
     </script>
 </body>
