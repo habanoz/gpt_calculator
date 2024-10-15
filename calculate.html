@@ -18,6 +18,10 @@
             <input type="number" value="768" id="hidden-dim" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
         </div>
         <div class="mb-4">
+            <label for="num-heads" class="block text-sm font-medium text-gray-700">Number of Heads:</label>
+            <input type="number" value="2" id="num-heads" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+        </div>
+        <div class="mb-4">
             <label for="num-layers" class="block text-sm font-medium text-gray-700">Number of Layers:</label>
             <input type="number" value="12" id="num-layers" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
         </div>
@@ -49,6 +53,36 @@
             <input type="number" value="0.22" id="mfu" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
         </div>
 
+        <h2 class="text-2xl font-semibold mb-4">Memory Estimations</h1>
+        
+            <div class="mb-4">
+                <label for="batch_size" class="block text-sm font-medium text-gray-700">Batch Size:</label>
+                <input type="number" value="8" id="batch_size" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+            </div>
+            <div class="mb-4">
+                <label for="amp" class="block text-sm font-medium text-gray-700">Automatic Mixed Precision (AMP):</label>
+                <input type="checkbox" id="amp" class="mt-1 block" checked>
+            </div>          
+            <div class="mb-4">
+                <label for="dropout" class="block text-sm font-medium text-gray-700">Use Dropout:</label>
+                <input type="checkbox" id="dropout" class="mt-1 block" checked>
+            </div>
+
+            <div class="mb-4">
+                <label for="optimizerSelect" class="block text-sm font-medium text-gray-700">Optimizer:</label>
+                <div class="relative inline-block w-full">
+                    <select id="optimizerSelect" class="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 pr-8 rounded shadow leading-tight focus:outline-none focus:shadow-outline">
+                      <option value="adamw">AdamW</option>
+                      <option value="sdg">SDG</option>
+                      <option value="8bitadam">8_Bit Adam</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                      <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                  </div>
+                          
+            </div>
+
         <button onclick="calculateParameters()" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             Calculate
         </button>
@@ -61,6 +95,12 @@
         <div id="llama_estimations" class="mt-4 text-lg font-semibold" style="display: none;">Llama3 Estimations for the same FLOPs</div>
         <div id="llama_estimation_token" class="mt-4 text-lg"></div>
         <div id="llama_estimation_param" class="mt-4 text-lg"></div>
+        <div id="memory_usage" class="mt-4 text-lg font-semibold" style="display: none;">GPU Memory Usage</div>
+        <div id="total_memory_usage" class="mt-4 text-lg"></div>
+        <div id="activation_memory_usage" class="mt-4 text-lg"></div>
+        <div id="grad_memory_usage" class="mt-4 text-lg"></div>
+        <div id="parameter_memory_usage" class="mt-4 text-lg"></div>
+        <div id="optimizer_memory_usage" class="mt-4 text-lg"></div>
     </div>
 
     <script>
@@ -77,6 +117,107 @@
             return [tokens, params];
         }
 
+        function calcBlock(B, S, D, NH, amp = false, dropout = false, bias = false) {
+            const bo = 1;
+            const fp = 4;
+            const mp = amp? 2 : 4;
+            const hp = 2;
+            const i64 = 8;
+
+            let total = 0;
+
+            // layer norm1
+            total += B * S * fp; // NativeLayerNormBackward0-result1
+            total += B * S * fp; // NativeLayerNormBackward0-result2
+            total += (bias? 0 : 0) * fp; // NativeLayerNormBackward0-bias
+
+            // layer norm2
+            total += B * S * D * fp; // NativeLayerNormBackward0-input
+            total += B * S * fp; // NativeLayerNormBackward0-result1
+            total += B * S * fp; // NativeLayerNormBackward0-result2
+            total += (bias? 0 : 0) * fp; // NativeLayerNormBackward0-bias
+
+            // scaled_dot_product_attention efficient implementation
+            total += B * S * D * mp; // MmBackward0-self (c_attn)
+            total += (amp? 3 * D * D * hp : 0); // MmBackward0-mat2 (c_attn)
+
+            total += B * S * D * mp; // ScaledDotProductEfficientAttentionBackward0-value-query-key
+            total += B * S * D * mp; // ScaledDotProductEfficientAttentionBackward0-value-query-key
+            total += B * S * D * mp; // ScaledDotProductEfficientAttentionBackward0-value-query-key
+            total += B * NH * S * fp; // ScaledDotProductEfficientAttentionBackward0-log_sumexp
+            total += i64; // ScaledDotProductEfficientAttentionBackward0-philox_offset
+            total += i64; // ScaledDotProductEfficientAttentionBackward0-philox_seed
+            total += B * S * D * mp; // ScaledDotProductEfficientAttentionBackward0-output
+
+            // attention-c_proj
+            total += (amp? D * D * hp : 0); // MmBackward0-mat2 (c_proj)
+
+            // attention-droput
+            total += (dropout? B * S * D * 1 : 0); // NativeDropoutBackward0-result1
+
+            // MLP
+            total += (amp? S * D * hp : 0); // MmBackward0-mat2 (c_fc)
+            total += B * S * D * mp; // MmBackward0-self (c_fc)
+
+            total += B * S * S * mp; // GeluBackward0-self
+
+            total += (amp? S * D * hp : 0); // MmBackward0-mat2 (c_proj)
+            total += B * S * S * mp; // MmBackward0-self (c_proj)
+
+            // mlp dropout
+            total += (dropout? B * S * D * 1 : 0); // NativeDropoutBackward0-result1
+
+            return total;
+        }
+
+        function calcGpt(B, S, D, NH, V, nLayers = 1, amp = false, dropout = false, bias = false) {
+            const bo = 1;
+            const fp = 4;
+            const mp = amp? 2 : 4;
+            const hp = 2;
+            const i64 = 8;
+
+            let total = 0;
+
+            // token embeddings
+            total += B * S * i64;
+
+            // position embeddings
+            total += S * i64;
+
+            // x = self.transformer.drop(tok_emb + pos_emb)
+            total += (dropout? B * S * D * bo : 0);
+
+            // add blocks
+            total += B * S * D * fp;
+            total += nLayers * calcBlock(B, S, D, NH, amp, dropout, bias);
+
+            // final ln
+            total += B * S * D * fp;
+            total += B * S * fp;
+            total += B * S * fp;
+            total += (bias? 0 * fp : 0); // NativeLayerNormBackward0-bias
+
+            // lm_head
+            total += (amp? V * D * hp : 0);
+            total += B * S * D * mp;
+
+            return total;
+        }
+
+        function getOptimizerBytes(optimizer) {
+            switch (optimizer) {
+                case 'adamw':
+                    return 8;
+                case 'sdg':
+                    return 4;
+                case '8bitadam':
+                    return 2;
+                default:
+                    throw new Error(`Unsupported optimizer: ${optimizer}`);
+            }
+        }
+
         function calculateParameters() {
             const sequenceLength = parseInt(document.getElementById('seq-length').value);
             const hiddenDim = parseInt(document.getElementById('hidden-dim').value);
@@ -87,6 +228,12 @@
             const includeEmbeddings = document.getElementById('includeEmbeddings').checked; 
             const mfu = parseFloat(document.getElementById('mfu').value);
             const tflops = parseFloat(document.getElementById('tflops').value);
+            
+            const numHeads = parseFloat(document.getElementById('num-heads').value);
+            const batchSize = parseInt(document.getElementById('batch_size').value);
+            const amp = document.getElementById('amp').checked;
+            const dropout = document.getElementById('dropout').checked;
+            const selectedOptimizer = document.getElementById('optimizerSelect').value;
 
             if (isNaN(sequenceLength) || isNaN(hiddenDim) || isNaN(numLayers) || isNaN(vocabSize)) {
                 document.getElementById('result').textContent = 'Please enter valid numbers.';
@@ -116,6 +263,7 @@
 
             const totalParamsWOEmbedding = (paramsPerLayer * numLayers) + final_ln + final_dense; 
             let totalParams = totalParamsWOEmbedding;
+            let totalParamsWEmbedding = totalParamsWOEmbedding;
 
             if (includeEmbeddings){
                 totalParams += wpe
@@ -123,6 +271,12 @@
                     // if weight tying, wte and final_dense is shared. Only count wte when weight tying is off
                     totalParams += wte; 
                 }
+            }
+
+            totalParamsWEmbedding += wpe;
+            if (!weightTying){
+                // if weight tying, wte and final_dense is shared. Only count wte when weight tying is off
+                totalParamsWEmbedding += wte; 
             }
 
             if(includeBias){
@@ -151,6 +305,12 @@
 
                 const [ll_tokens, ll_params] = llamaLaws(total_compute);
                 
+                const parameterMemory = totalParamsWEmbedding * 4;
+                const gradientMemory = totalParamsWEmbedding * 4;
+                const optimizerMemory = totalParamsWEmbedding * getOptimizerBytes(selectedOptimizer);
+                const activationMemory = calcGpt(batchSize, sequenceLength, hiddenDim, numHeads, vocabSize, numLayers, amp, dropout, includeBias);
+                const totalMemory = activationMemory + optimizerMemory + parameterMemory+gradientMemory; 
+
                 document.getElementById('estimations').style.display = `block`;
                 document.getElementById('tokens').textContent = `Optimal Tokens: ${tokens.toExponential(3)}`;
                 document.getElementById('total_flops').textContent = `Cost (FLOP): ${total_compute.toExponential(3)}`;
@@ -158,6 +318,13 @@
                 document.getElementById('llama_estimations').style.display = `block`;
                 document.getElementById('llama_estimation_token').textContent = `Optimal Tokens: ${ll_tokens.toExponential(3)}`;
                 document.getElementById('llama_estimation_param').textContent = `Optimal Params: ${ll_params.toExponential(3)}`;
+
+                document.getElementById('memory_usage').style.display = `block`;
+                document.getElementById('total_memory_usage').textContent = `Total: ${totalMemory.toLocaleString()}`;
+                document.getElementById('activation_memory_usage').textContent = `Activation: ${activationMemory.toLocaleString()}`;
+                document.getElementById('grad_memory_usage').textContent = `Gradients: ${gradientMemory.toLocaleString()}`;
+                document.getElementById('parameter_memory_usage').textContent = `Parameters: ${parameterMemory.toLocaleString()}`;
+                document.getElementById('optimizer_memory_usage').textContent = `Optimizer: ${optimizerMemory.toLocaleString()}`;
             }else{
                 document.getElementById('tokens').textContent = ``;
                 document.getElementById('estimations').textContent = ``;
