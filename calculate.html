@@ -127,6 +127,7 @@
             let total = 0;
 
             // layer norm1
+            total += B * S * D * fp // NativeLayerNormBackward0-input
             total += B * S * fp; // NativeLayerNormBackward0-result1
             total += B * S * fp; // NativeLayerNormBackward0-result2
             total += (bias? 0 : 0) * fp; // NativeLayerNormBackward0-bias
@@ -147,10 +148,12 @@
             total += B * NH * S * fp; // ScaledDotProductEfficientAttentionBackward0-log_sumexp
             total += i64; // ScaledDotProductEfficientAttentionBackward0-philox_offset
             total += i64; // ScaledDotProductEfficientAttentionBackward0-philox_seed
-            total += B * S * D * mp; // ScaledDotProductEfficientAttentionBackward0-output
+            // this is accounted in c_proj matmul, avoid adding twice
+            // total += B * S * D * mp; // ScaledDotProductEfficientAttentionBackward0-output
 
             // attention-c_proj
             total += (amp? D * D * hp : 0); // MmBackward0-mat2 (c_proj)
+            total += B * S * D * mp // same as ScaledDotProductEfficientAttentionBackward0-output // MmBackward0-self  (c_proj)
 
             // attention-droput
             total += (dropout? B * S * D * 1 : 0); // NativeDropoutBackward0-result1
@@ -159,10 +162,10 @@
             total += (amp? S * D * hp : 0); // MmBackward0-mat2 (c_fc)
             total += B * S * D * mp; // MmBackward0-self (c_fc)
 
-            total += B * S * S * mp; // GeluBackward0-self
+            total += 4 * B * S * D * mp; // GeluBackward0-self
 
             total += (amp? S * D * hp : 0); // MmBackward0-mat2 (c_proj)
-            total += B * S * S * mp; // MmBackward0-self (c_proj)
+            total += 4 * B * S * D * mp; // MmBackward0-self (c_proj), this tensor comes from gelu
 
             // mlp dropout
             total += (dropout? B * S * D * 1 : 0); // NativeDropoutBackward0-result1
@@ -189,7 +192,6 @@
             total += (dropout? B * S * D * bo : 0);
 
             // add blocks
-            total += B * S * D * fp;
             total += nLayers * calcBlock(B, S, D, NH, amp, dropout, bias);
 
             // final ln
