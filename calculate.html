@@ -17,10 +17,10 @@
             <label for="hidden-dim" class="block text-sm font-medium text-gray-700">Hidden Dimension:</label>
             <input type="number" value="768" id="hidden-dim" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
         </div>
-        <div class="mb-4">
+        <!--div class="mb-4">
             <label for="num-heads" class="block text-sm font-medium text-gray-700">Number of Heads:</label>
             <input type="number" value="2" id="num-heads" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
-        </div>
+        </div-->
         <div class="mb-4">
             <label for="num-layers" class="block text-sm font-medium text-gray-700">Number of Layers:</label>
             <input type="number" value="12" id="num-layers" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
@@ -53,7 +53,7 @@
             <input type="number" value="0.22" id="mfu" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
         </div>
 
-        <h2 class="text-2xl font-semibold mb-4">Memory Estimations</h1>
+        <!--h2 class="text-2xl font-semibold mb-4">Memory Estimations</h1>
         
             <div class="mb-4">
                 <label for="batch_size" class="block text-sm font-medium text-gray-700">Batch Size:</label>
@@ -81,7 +81,7 @@
                     </div>
                   </div>
                           
-            </div>
+            </div-->
 
         <button onclick="calculateParameters()" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             Calculate
@@ -229,11 +229,13 @@
             const mfu = parseFloat(document.getElementById('mfu').value);
             const tflops = parseFloat(document.getElementById('tflops').value);
             
+            /*
             const numHeads = parseFloat(document.getElementById('num-heads').value);
             const batchSize = parseInt(document.getElementById('batch_size').value);
             const amp = document.getElementById('amp').checked;
             const dropout = document.getElementById('dropout').checked;
             const selectedOptimizer = document.getElementById('optimizerSelect').value;
+            */
 
             if (isNaN(sequenceLength) || isNaN(hiddenDim) || isNaN(numLayers) || isNaN(vocabSize)) {
                 document.getElementById('result').textContent = 'Please enter valid numbers.';
@@ -305,11 +307,13 @@
 
                 const [ll_tokens, ll_params] = llamaLaws(total_compute);
                 
+                /*
                 const parameterMemory = totalParamsWEmbedding * 4;
                 const gradientMemory = totalParamsWEmbedding * 4;
                 const optimizerMemory = totalParamsWEmbedding * getOptimizerBytes(selectedOptimizer);
                 const activationMemory = calcGpt(batchSize, sequenceLength, hiddenDim, numHeads, vocabSize, numLayers, amp, dropout, includeBias);
                 const totalMemory = activationMemory + optimizerMemory + parameterMemory+gradientMemory; 
+                */
 
                 document.getElementById('estimations').style.display = `block`;
                 document.getElementById('tokens').textContent = `Optimal Tokens: ${tokens.toExponential(3)}`;
@@ -318,13 +322,15 @@
                 document.getElementById('llama_estimations').style.display = `block`;
                 document.getElementById('llama_estimation_token').textContent = `Optimal Tokens: ${ll_tokens.toExponential(3)}`;
                 document.getElementById('llama_estimation_param').textContent = `Optimal Params: ${ll_params.toExponential(3)}`;
-
+                
+                /*
                 document.getElementById('memory_usage').style.display = `block`;
                 document.getElementById('total_memory_usage').textContent = `Total: ${totalMemory.toLocaleString()}`;
                 document.getElementById('activation_memory_usage').textContent = `Activation: ${activationMemory.toLocaleString()}`;
                 document.getElementById('grad_memory_usage').textContent = `Gradients: ${gradientMemory.toLocaleString()}`;
                 document.getElementById('parameter_memory_usage').textContent = `Parameters: ${parameterMemory.toLocaleString()}`;
                 document.getElementById('optimizer_memory_usage').textContent = `Optimizer: ${optimizerMemory.toLocaleString()}`;
+                */
             }else{
                 document.getElementById('tokens').textContent = ``;
                 document.getElementById('estimations').textContent = ``;
